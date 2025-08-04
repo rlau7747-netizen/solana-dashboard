@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Arbitrage Pro</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; margin: 0; }
+        .dashboard { max-width: 1200px; margin: auto; }
+        .header { text-align: center; color: #4CAF50; }
+        nav { text-align: center; margin: 10px 0; }
+        nav a { margin: 0 10px; text-decoration: none; color: #333; }
+        .section { margin: 20px 0; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .portfolio { display: flex; justify-content: space-around; flex-wrap: wrap; }
+        .portfolio div { text-align: center; flex: 1; min-width: 200px; margin: 10px; }
+        .green { color: green; font-weight: bold; }
+        .trades table { width: 100%; border-collapse: collapse; }
+        .trades th, .trades td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        .trades th { background-color: #f2f2f2; }
+        #opportunity-list li { margin: 5px 0; }
+        footer { text-align: center; font-size: 12px; color: #888; margin-top: 20px; }
+        input { padding: 5px; margin-right: 5px; }
+        button { padding: 5px 10px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <h1 class="header">Solana Arbitrage Pro</h1>
+        <h2 style="text-align: center;">Real-time DEX monitoring: Raydium, Orca, Jupiter</h2>
+        <nav>
+            <a href="#">Monitoring</a> | <a href="#">Opportunities</a> | <a href="#">Analytics</a> | <a href="#">Portfolio</a> | <a href="#">Settings</a>
+        </nav>
+        
+        <div class="section portfolio">
+            <div>
+                <h3>Portfolio Value</h3>
+                <p id="portfolioValue">$24,856.32</p>
+            </div>
+            <div>
+                <h3>24h Profit</h3>
+                <p id="profit24h" class="green">+$1,234.56</p>
+            </div>
+            <div>
+                <h3>24h Return</h3>
+                <p id="return24h" class="green">+5.23%</p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>Active Trades</h3>
+            <p id="activeTrades">Loading...</p>
+        </div>
+        
+        <div class="section">
+            <h3>Watchlist</h3>
+            <ul id="watchlist">Loading...</ul>
+            <input type="text" id="newPair" placeholder="Add pair e.g. WIF/SOL">
+            <button onclick="addToWatchlist()">Add</button>
+        </div>
+        
+        <div class="section trades">
+            <h3>Recent Executions</h3>
+            <p>Last 10 executed arbitrage trades</p>
+            <table id="recentTable">
+                <tr><th>Pair</th><th>Time</th><th>Profit</th><th>Status</th></tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>Current Opportunities</h3>
+            <ul id="opportunity-list">Loading...</ul>
+        </div>
+        
+        <div class="section">
+            <h3>Profit History</h3>
+            <canvas id="profitChart"></canvas>
+        </div>
+        
+        <footer>Built by Grok</footer>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('profitChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Profit ($)',
+                    data: [],
+                    borderColor: '#4CAF50',
+                    fill: false
+                }]
+            }
+        });
+
+        async function refreshData() {
+            try {
+                const response = await fetch('/data');
+                const data = await response.json();
+                document.getElementById('portfolioValue').innerText = `$${data.portfolioValue.toFixed(2)}`;
+                document.getElementById('profit24h').innerText = `+$${data.profit24h.toFixed(2)}`;
+                document.getElementById('return24h').innerText = `+${data.return24h}%`;
+                document.getElementById('activeTrades').innerText = `${data.activeTrades[0].pair} +$${data.activeTrades[0].profit} ${data.activeTrades[0].status}`;
+
+                const watchlistUl = document.getElementById('watchlist');
+                watchlistUl.innerHTML = '';
+                data.watchlist.forEach(pair => {
+                    const li = document.createElement('li');
+                    li.textContent = pair;
+                    watchlistUl.appendChild(li);
+                });
+
+                const table = document.getElementById('recentTable');
+                table.innerHTML = '<tr><th>Pair</th><th>Time</th><th>Profit</th><th>Status</th></tr>';
+                data.recentExecutions.forEach(trade => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${trade.pair}</td><td>${trade.time}</td><td class="green">+$${trade.profit}</td><td>${trade.status}</td>`;
+                    table.appendChild(row);
+                });
+
+                const oppList = document.getElementById('opportunity-list');
+                oppList.innerHTML = '';
+                data.opportunities.forEach(opp => {
+                    const li = document.createElement('li');
+                    li.textContent = `Pair: ${opp.pair}, Profit: $${opp.profit} (${opp.profitPct}%), Buy: $${opp.buyPrice}, Sell: $${opp.sellPrice}`;
+                    oppList.appendChild(li);
+                });
+
+                chart.data.labels.push(new Date().toLocaleTimeString());
+                chart.data.datasets[0].data.push(data.opportunities[0]?.profit || 0);
+                chart.update();
+            } catch (error) {
+                document.getElementById('opportunity-list').innerText = 'Error loading data';
+            }
+        }
+
+        async function addToWatchlist() {
+            const newPair = document.getElementById('newPair').value;
+            if (newPair) {
+                await fetch('/add-watchlist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ pair: newPair })
+                });
+                document.getElementById('newPair').value = '';
+                refreshData();
+            }
+        }
+
+        refreshData();
+        setInterval(refreshData, 10000);
+    </script>
+</body>
+</html>
